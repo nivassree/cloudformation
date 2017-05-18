@@ -1,0 +1,238 @@
+{
+  "Parameters": {
+    "SubnetAZ1": {
+      "Description": "Availability Zone of the public Subnet",
+      "Type": "AWS::EC2::AvailabilityZone::Name"
+    },
+    "SubnetAZ2": {
+      "Description": "Availability Zone of the private Subnet",
+      "Type": "AWS::EC2::AvailabilityZone::Name"
+    },
+    "KeyFile": {
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "Description": "Select Keypair For the Instance"
+    }
+  },
+  "Resources": {
+    "HclVpc": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "190.160.0.0/16",
+        "EnableDnsSupport": "false",
+        "EnableDnsHostnames": "true",
+        "InstanceTenancy": "default",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "HclVpc"
+          }
+        ]
+      }
+    },
+    "PublicSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "HclVpc"
+        },
+        "CidrBlock": "190.160.1.0/24",
+        "AvailabilityZone": {
+          "Ref": "SubnetAZ1"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Public Subnet"
+          }
+        ]
+      }
+    },
+    "PrivateSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "HclVpc"
+        },
+        "CidrBlock": "190.160.2.0/24",
+        "AvailabilityZone": {
+          "Ref": "SubnetAZ2"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Private Subnet"
+          }
+        ]
+      }
+    },
+	"NetworkAclForPublicSubnet" : {
+         "Type" : "AWS::EC2::NetworkAcl",
+         "Properties" : {
+            "VpcId" : { "Ref" : "HclVpc" }
+         }
+      },
+	   "myNetworkAclEntry" : {
+         "Type" : "AWS::EC2::NetworkAclEntry",
+         "Properties" : {
+            "NetworkAclId" : { "Ref" : "NetworkAclForPublicSubnet" },
+            "RuleNumber" : "200",
+            "Protocol" : "-1",
+            "RuleAction" : "allow",
+            "Egress" : "true",
+            "CidrBlock" : "0.0.0.0/0",
+            "PortRange" : { "From" : "53", "To" : "53" }
+         }
+      },
+    "HCLInternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "HCLInternetGateway"
+          }
+        ]
+      }
+    },
+    "AttachGateway": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "HclVpc"
+        },
+        "InternetGatewayId": {
+          "Ref": "HCLInternetGateway"
+        }
+      }
+    },
+    "PublicSubnetRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "HclVpc"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "PublicSubnetRouteTable"
+          }
+        ]
+      }
+    },
+    "InternetRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "HCLInternetGateway",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PublicSubnetRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "HCLInternetGateway"
+        }
+      }
+    },
+    "PublicSubnetAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "PublicSubnetRouteTable"
+        }
+      }
+    },
+    "PublicsecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+    	"VpcId": { "Ref": "HclVpc" },
+        "GroupDescription": "Enable SSH access through port 22",
+	"SecurityGroupIngress":[
+	 {"IpProtocol": "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "0.0.0.0/0"},
+ 	 {"IpProtocol": "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"}
+	]}
+	},
+	
+     "PrivatesecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+    	"VpcId": { "Ref": "HclVpc" },
+        "GroupDescription": "Enable SSH access through port 22",
+	"SecurityGroupIngress":[
+	 {"IpProtocol": "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "0.0.0.0/0"}
+ 	 ]}
+	},
+
+    "EC2InstancePubSubnet": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": "ami-4836a428",
+        "InstanceType": "t2.micro",
+        "KeyName": {
+          "Ref": "KeyFile"
+        },
+        "NetworkInterfaces": [
+	{
+	"GroupSet": [{ "Ref": "PublicsecurityGroup" }],
+	"AssociatePublicIpAddress": "true",
+	"DeviceIndex": "0",
+        "SubnetId": { "Ref": "PublicSubnet" }
+         }],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "PublicInstance1"
+          }
+        ]
+      }
+  },
+
+    "EC2InstancePrivateSubnet1": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": "ami-6f68cf0f",
+        "InstanceType": "t2.micro",
+        "KeyName": {
+          "Ref": "KeyFile"
+        },
+	"NetworkInterfaces": [
+	{
+	"GroupSet": [{ "Ref": "PrivatesecurityGroup" }],
+	"AssociatePublicIpAddress": "true",
+	"DeviceIndex": "0",
+        "SubnetId": { "Ref": "PrivateSubnet" }
+         }],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "HCLEC2Instance2"
+          }
+        ]
+      }
+    },
+    "EC2InstancePrivateSubnet2": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": "ami-6f68cf0f",
+        "InstanceType": "t2.micro",
+	"KeyName": {
+          "Ref": "KeyFile"
+        },
+	"NetworkInterfaces": [
+	{
+	"GroupSet": [{ "Ref": "PrivatesecurityGroup" }],
+	"AssociatePublicIpAddress": "true",
+	"DeviceIndex": "0",
+        "SubnetId": { "Ref": "PrivateSubnet" }
+         }],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "HCLEC2Instance3"
+          }
+        ]
+      }
+    }
+  }
+}
